@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Matters — 집합을 위한 seq2seq</title>
+<meta name="description" content="Order Matters: Sequence to Sequence for Sets (Vinyals, Bengio & Kudlur, ICLR 2016) 인터랙티브 해설. 체인 룰은 어떤 순서로도 성립하는데 왜 순서가 성능을 바꾸는가, 순서를 섞어도 같은 값을 내는 Read-Process-Write 모델, 포인터 네트워크와 glimpse, 정렬 실험, 출력 순서와 n! 동치류, 학습 중에 순서를 고르는 손실까지 브라우저에서 직접 실험하는 교육 자료.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb;
+  --page:#f9f9f7;
+  --text-primary:#0b0b0b;
+  --text-secondary:#52514e;
+  --muted:#898781;
+  --grid:#e1e0d9;
+  --axis:#c3c2b7;
+  --border:rgba(11,11,11,0.10);
+  --s1:#2a78d6;
+  --s2:#eb6834;
+  --s3:#1baf7a;
+  --s4:#8b5cf6;
+  --s8:#e34948;
+  --warn:#fab219;
+  --good:#0ca30c;
+  --wash:rgba(42,120,214,0.08);
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19;
+  --page:#0d0d0d;
+  --text-primary:#ffffff;
+  --text-secondary:#c3c2b7;
+  --muted:#898781;
+  --grid:#2c2c2a;
+  --axis:#383835;
+  --border:rgba(255,255,255,0.10);
+  --s1:#3987e5;
+  --s2:#d95926;
+  --s3:#199e70;
+  --s4:#a78bfa;
+  --s8:#e66767;
+  --warn:#fab219;
+  --good:#0ca30c;
+  --wash:rgba(57,135,229,0.14);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%; scroll-behavior:smooth}
+body{
+  margin:0; background:var(--page); color:var(--text-primary);
+  font-family:system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  font-size:16px; line-height:1.75; letter-spacing:-0.01em;
+}
+.wrap{max-width:880px;margin:0 auto;padding:0 16px 120px}
+header.hero{padding:56px 0 28px;border-bottom:1px solid var(--border);margin-bottom:8px}
+h1{font-size:clamp(28px,5.2vw,42px);line-height:1.25;margin:0 0 12px;letter-spacing:-0.03em}
+.sub{color:var(--text-secondary);font-size:17px;margin:0}
+.kicker{font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px}
+h2{font-size:clamp(21px,3.4vw,27px);margin:56px 0 6px;letter-spacing:-0.02em;line-height:1.3}
+h3{font-size:18px;margin:34px 0 6px;letter-spacing:-0.015em}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-left:22px}
+li{margin:6px 0}
+strong{font-weight:650}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.9em;background:var(--wash);padding:1px 5px;border-radius:4px}
+a{color:var(--s1)}
+.demo{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:18px;margin:24px 0}
+.demo h4{margin:0 0 2px;font-size:15px;color:var(--text-primary);font-weight:650}
+.demo .cap{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.6}
+canvas{display:block;width:100%;border-radius:8px;background:var(--surface-1);touch-action:none}
+.ctrls{display:flex;flex-wrap:wrap;gap:14px 22px;margin:14px 0 4px;align-items:flex-end}
+.ctrl{flex:1 1 210px;min-width:170px}
+.ctrl label{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--text-secondary);margin-bottom:4px;gap:10px}
+.ctrl label b{font-variant-numeric:tabular-nums;color:var(--text-primary);font-weight:650;font-size:13px}
+input[type=range]{width:100%;accent-color:var(--s1);height:22px;margin:0}
+input[type=text]{font:inherit;font-size:14px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--page);color:var(--text-primary)}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+button{font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-1);color:var(--text-primary);transition:background .12s}
+button:hover{background:var(--wash)}
+button[aria-pressed=true]{background:var(--wash);border-color:var(--s1)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--text-secondary);margin:10px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:10px;border-radius:2px;display:inline-block}
+.readout{display:flex;flex-wrap:wrap;gap:8px 26px;margin-top:12px;font-size:13px;color:var(--text-secondary)}
+.readout b{display:block;font-size:19px;color:var(--text-primary);font-weight:650;line-height:1.3;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.eq{background:var(--surface-1);border:1px solid var(--border);border-left:3px solid var(--s1);
+  border-radius:0 10px 10px 0;padding:14px 18px;margin:18px 0;overflow-x:auto;text-align:center}
+.eq .note{display:block;font-size:12.5px;color:var(--muted);margin:6px 0 0;line-height:1.55;text-align:left}
+.tw{overflow-x:auto;margin:18px 0;border:1px solid var(--border);border-radius:12px;background:var(--surface-1)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
+th{font-weight:650;font-size:12.5px;color:var(--text-secondary);background:var(--page)}
+tr:last-child td{border-bottom:none}
+td.num,th.num{font-variant-numeric:tabular-nums;text-align:right}
+td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+.note{border-left:3px solid var(--axis);padding:2px 0 2px 16px;margin:18px 0;color:var(--text-secondary);font-size:14.5px}
+.key{border:1px solid var(--border);border-left:3px solid var(--s2);background:var(--surface-1);
+  border-radius:0 10px 10px 0;padding:14px 18px;margin:20px 0}
+.key .lbl{font-size:11.5px;font-weight:700;letter-spacing:0.1em;color:var(--s2);display:block;margin-bottom:4px}
+.key p{margin:0}
+nav.toc{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:18px 22px;margin:26px 0}
+nav.toc ol{margin:6px 0 0;padding-left:20px;font-size:14.5px}
+nav.toc a{text-decoration:none;color:var(--text-primary)}
+nav.toc a:hover{color:var(--s1)}
+.q{border:1px solid var(--border);border-radius:10px;background:var(--surface-1);padding:16px 18px;margin:14px 0}
+.q h4{margin:0 0 8px;font-size:15px;color:var(--text-primary)}
+.q .opt{display:flex;gap:9px;align-items:flex-start;padding:7px 10px;border:1px solid var(--border);
+  border-radius:8px;margin:6px 0;cursor:pointer;font-size:14px;transition:border-color .12s}
+.q .opt:hover{border-color:var(--s1)}
+.q .opt input{margin-top:5px;accent-color:var(--s1)}
+.q .opt.correct{border-color:var(--good);background:rgba(12,163,12,0.08)}
+.q .opt.wrong{border-color:var(--s8);background:rgba(227,73,72,0.07)}
+.q .expl{display:none;font-size:13.5px;color:var(--text-secondary);border-left:3px solid var(--good);
+  padding:2px 0 2px 12px;margin-top:10px;line-height:1.65}
+.q .expl.bad{border-left-color:var(--s8)}
+.q .expl.show{display:block}
+.quiz-score{font-size:15px;font-weight:700;margin-top:14px}
+.tog{position:fixed;top:14px;right:14px;z-index:10;border-radius:999px;padding:7px 13px;
+  background:var(--surface-1);border:1px solid var(--border);font-size:12.5px}
+footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+footer a{color:var(--text-secondary)}
+.refs{font-size:13px;color:var(--text-secondary);line-height:1.7}
+.easy{background:var(--surface-1);border:1px solid var(--border);border-left:3px solid var(--s3);border-radius:0 14px 14px 0;padding:18px 20px;margin:24px 0}
+.easy .lbl{font-size:11.5px;font-weight:700;letter-spacing:0.1em;color:var(--s3);display:block;margin-bottom:2px}
+.easy h3{margin:0 0 8px}
+.easy ol{padding-left:20px}
+.mat{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.7;
+  background:var(--page);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:12px;overflow-x:auto;white-space:pre}
+.ok{color:var(--good);font-weight:700}
+.bad{color:var(--s8);font-weight:700}
+/* 칩 */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;font-variant-numeric:tabular-nums;
+  padding:3px 9px;border-radius:6px;border:1px solid var(--border);background:var(--page)}
+.chip.on{border-color:var(--s1);background:var(--wash)}
+.rowlbl{font-size:12px;color:var(--muted);margin-top:10px}
+/* 벡터 막대 */
+.vec{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;align-items:center;font-size:12.5px;margin-top:10px}
+.vec .bars{display:flex;gap:3px;height:44px;align-items:center}
+.vec .bars span{flex:1;position:relative;height:100%;background:var(--page);border:1px solid var(--border);border-radius:3px;overflow:hidden}
+.vec .bars span i{position:absolute;left:0;right:0}
+.vec .bars span:after{content:'';position:absolute;left:0;right:0;top:50%;border-top:1px solid var(--axis)}
+/* 히트맵 */
+.hm{display:grid;gap:3px;margin-top:10px;font-size:11px}
+.hm span{height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.hm .h{background:none;color:var(--muted);font-weight:600}
+/* 막대 그래프 */
+.hbar{display:grid;grid-template-columns:120px 1fr 52px;gap:6px 10px;align-items:center;font-size:13px;margin-top:6px}
+.hbar .track{height:16px;background:var(--page);border:1px solid var(--border);border-radius:4px;position:relative;overflow:hidden}
+.hbar .track i{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.hbar b{font-variant-numeric:tabular-nums;text-align:right}
+.grp{font-size:12px;color:var(--muted);margin-top:12px;font-weight:600}
+.stack{display:flex;height:30px;border-radius:6px;overflow:hidden;border:1px solid var(--border);margin-top:4px}
+.stack span{display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-variant-numeric:tabular-nums;border-right:1px solid var(--surface-1);white-space:nowrap;overflow:hidden}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.two{grid-template-columns:1fr}.hbar{grid-template-columns:92px 1fr 46px}.vec{grid-template-columns:84px 1fr}}
+</style>
+</head>
+<body>
+<button class="tog" id="themeBtn" type="button">◐ 다크</button>
+<div class="wrap">
+
+<header class="hero">
+  <p class="kicker">how-ai-works · seq2seq</p>
+  <h1>Order Matters — 집합을 위한 seq2seq</h1>
+  <p class="sub">체인 룰은 어떤 순서로 풀어도 같은 확률을 준다. 그런데 왜 순서를 바꾸면 성능이 달라질까? 순서가 없는 입력은 어떻게 읽고, 순서가 없는 출력은 어떻게 내보내야 할까?</p>
+  <p class="sub" style="font-size:14px;margin-top:10px">Vinyals, Bengio &amp; Kudlur, <em>Order Matters: Sequence to Sequence for Sets</em>, ICLR 2016 · <a href="https://arxiv.org/abs/1511.06391">arXiv:1511.06391</a></p>
+</header>
+
+<div class="easy">
+  <span class="lbl">한눈에 보기</span>
+  <h3>이 논문이 하는 말 세 가지</h3>
+  <ol>
+    <li><strong>순서는 이론상 상관없지만 실제로는 중요하다.</strong> 번역 입력을 뒤집으면 BLEU가 5.0 오르고, 파스 트리를 너비 우선으로 펼치면 F1이 89.5% → 81.5%로 떨어진다.</li>
+    <li><strong>입력이 집합이면 순서를 아예 못 느끼는 인코더를 쓰자.</strong> 원소를 따로따로 임베딩한 뒤, 입력 없는 LSTM이 어텐션으로 그 메모리를 여러 번 읽는다(Read-Process-Write). 원소를 섞어도 결과가 (부동소수점 반올림 오차를 빼면) 똑같다.</li>
+    <li><strong>출력이 집합이면 순서를 모델이 고르게 하자.</strong> 정답 집합을 내보낼 수 있는 n!가지 순서 중 모델이 가장 쉽게 여기는 순서로 학습한다(식 9). 5-gram 실험에서 120가지 순서를 섞어 줘도 모델은 자연스러운 순서를 스스로 찾아 같은 퍼플렉시티 225에 도달했다.</li>
+  </ol>
+</div>
+
+<nav class="toc">
+  <strong>목차</strong>
+  <ol>
+    <li><a href="#s1">체인 룰은 순서를 가리지 않는다</a></li>
+    <li><a href="#s2">그런데 입력 순서는 중요했다</a></li>
+    <li><a href="#s3">순서를 못 느끼는 인코더 — 합과 그 한계</a></li>
+    <li><a href="#s4">Read · Process · Write</a></li>
+    <li><a href="#s5">정렬 실험 (표 1)</a></li>
+    <li><a href="#s6">출력 순서도 중요하다</a></li>
+    <li><a href="#s7">별 모양 그래피컬 모델</a></li>
+    <li><a href="#s8">학습하면서 순서 찾기 (식 9)</a></li>
+    <li><a href="#s9">그 뒤의 이야기</a></li>
+    <li><a href="#quizSec">퀴즈</a></li>
+  </ol>
+</nav>
+
+<!-- ══════════ 1 ══════════ -->
+<h2 id="s1">1. 체인 룰은 순서를 가리지 않는다</h2>
+<p>seq2seq는 출력 \(Y = (y_1, \dots, y_T)\)의 조건부 확률을 체인 룰로 쪼갭니다. 디코더 LSTM은 한 번에 한 토큰씩, 앞에서 낸 토큰을 조건으로 다음 토큰의 분포를 냅니다.</p>
+<div class="eq">$$P(Y\mid X) = \prod_{t=1}^{T} P(y_t \mid y_1, \dots, y_{t-1}, X)$$
+<span class="note">독립 가정이 하나도 없다. 그래서 \(y\)들을 어떤 순서로 나열해도 위 곱은 정확히 같은 결합확률이 된다 — 순서를 바꾸는 것은 베이즈 규칙으로 조건부들을 다시 쓰는 것일 뿐이다.</span></div>
+<p>입력 쪽도 마찬가지입니다. 인코더 LSTM은 \(h_s = f_\text{enc}(h_{s-1}, x_s)\)로 입력을 하나씩 읽는데, LSTM은 보편 근사기라서 원칙적으로는 어느 순서로 읽든 필요한 특징을 뽑아낼 수 있습니다.</p>
+<p>그럼 숫자 집합 \(\{0.4, 0.1, 0.9\}\)를 정렬하라는 문제는 어떨까요? 이 집합을 LSTM에 넣으려면 <em>어떤</em> 순서로든 줄을 세워야 합니다. 그리고 줄을 세우는 순간, 인코더는 그 순서를 느낍니다.</p>
+
+<div class="demo">
+  <h4>데모 1 · 같은 집합, 다른 줄 세우기</h4>
+  <p class="cap">무작위로 고정한 가중치의 작은 RNN(은닉 8차원)에 같은 숫자 다섯 개를 순서만 바꿔 넣습니다. 아래쪽은 각 숫자를 따로 임베딩해 <strong>더하기만</strong> 한 결과입니다. "섞기"를 눌러 보세요.</p>
+  <div class="rowlbl">원래 순서</div><div class="chips" id="d1a"></div>
+  <div class="rowlbl">섞은 순서</div><div class="chips" id="d1b"></div>
+  <div class="vec" id="d1vec"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>원래 순서</span><span><i style="background:var(--s2);opacity:.75"></i>섞은 순서</span></div>
+  <div class="readout">
+    <div>RNN 마지막 상태 차이 ‖Δh‖<b id="d1rnn">–</b></div>
+    <div>임베딩 합 차이 ‖Δs‖<b id="d1sum">–</b></div>
+  </div>
+  <div class="btns"><button id="d1shuf">섞기</button><button id="d1new">새 숫자</button></div>
+</div>
+<p>RNN은 줄 세운 순서마다 다른 벡터를 내놓습니다. 학습이 이 차이를 지워야 하는데, 입력이 n개면 줄 세우는 방법이 n!가지입니다. 논문의 첫 번째 질문은 이것입니다. <strong>이론상 상관없는 이 순서가, 실제 학습에서는 상관이 있는가?</strong></p>
+
+<!-- ══════════ 2 ══════════ -->
+<h2 id="s2">2. 그런데 입력 순서는 중요했다</h2>
+<p>논문 4.1절은 저자들이 이미 겪은 사례 세 가지를 모읍니다.</p>
+<div class="tw"><table>
+  <tr><th>과제</th><th>순서 바꾸기</th><th>효과</th></tr>
+  <tr><td>영→불 기계 번역 (Sutskever 외 2014)</td><td>영어 문장을 거꾸로 입력</td><td class="num"><strong>BLEU +5.0</strong></td></tr>
+  <tr><td>구성 성분 파싱 (Vinyals 외 2015b)</td><td>영어 문장을 거꾸로 입력</td><td class="num">F1 +0.5%p</td></tr>
+  <tr><td>볼록 껍질 (Pointer Networks, 2015a)</td><td>점들을 각도순으로 정렬해 입력</td><td class="num">가장 어려운 경우 정확도 최대 +10%p</td></tr>
+</table></div>
+<p>저자들의 해석은 이렇습니다. 표현력은 충분하지만 <strong>최적화가 비볼록</strong>이라, 어떤 순서는 경사 하강법이 찾아가기 쉬운 길을 만들어 주고 어떤 순서는 그렇지 않다. 순서가 "더 알맞은 사전 지식(prior)" 역할을 한다는 것입니다.</p>
+<p>두 종류의 순서를 구별해 두면 좋습니다. 번역의 "항상 뒤집기"는 입력 내용과 <strong>무관한</strong> 순서이고, 볼록 껍질의 "각도순 정렬"은 입력에 <strong>의존하는</strong> 순서입니다. 후자는 사실상 문제의 일부를 미리 풀어 주는 것입니다.</p>
+
+<div class="demo">
+  <h4>데모 2 · 볼록 껍질: 번호만 다시 매겼을 뿐인데</h4>
+  <p class="cap">점 집합은 그대로 두고 입력 번호만 바꿉니다. 포인터 네트워크가 내야 하는 정답은 "껍질 위의 점 번호를 반시계 방향으로". 각도순 번호에서는 정답이 <strong>오름차순 수열</strong>이 되어, 모델은 앞에서부터 훑으며 건너뛸 점만 고르면 됩니다(Graham 스캔처럼 정렬 후 O(n)).</p>
+  <canvas id="d2c" height="300"></canvas>
+  <div class="btns"><button id="d2rand" aria-pressed="true">무작위 번호</button><button id="d2ang" aria-pressed="false">각도순 번호</button><button id="d2new">새 점</button></div>
+  <div class="rowlbl">정답 출력 (껍질 점 번호, 반시계)</div>
+  <div class="chips" id="d2out"></div>
+  <div class="readout"><div>앞 번호보다 작아지는 곳(되돌아가기)<b id="d2back">–</b></div></div>
+</div>
+
+<!-- ══════════ 3 ══════════ -->
+<h2 id="s3">3. 순서를 못 느끼는 인코더 — 합과 그 한계</h2>
+<p>집합을 인코딩할 때 반드시 지켜야 하는 성질은 하나입니다. <strong>두 원소 \(x_i, x_j\)를 맞바꿔도 인코딩이 변하면 안 된다</strong>(순열 불변).</p>
+<p>가장 쉬운 답은 데모 1 아래쪽처럼 각 원소의 임베딩을 더하는 것, 즉 bag-of-words입니다. 덧셈은 교환 법칙 덕분에 저절로 순열 불변입니다. 하지만 논문은 이 방법을 불만족스럽다고 봅니다.</p>
+<div class="key"><span class="lbl">합의 한계</span><p>원소가 3개든 300개든 결과는 같은 고정 차원 벡터 하나입니다. 길이 T인 집합을 담는 데 필요한 메모리는 T와 함께 늘어나야 하는데, 합은 그렇지 못합니다. seq2seq의 고정 길이 병목과 같은 문제입니다.</p></div>
+<p>그래서 필요한 것은 두 조건을 함께 만족하는 구조입니다. <strong>① 원소 수에 비례해 커지는 메모리</strong>, <strong>② 순열 불변</strong>. 논문은 이를 어텐션으로 풉니다. 원소마다 메모리 벡터를 하나씩 두고(①), 내용 기반 어텐션으로 읽으면 가중합은 메모리를 섞어도 변하지 않습니다(②).</p>
+
+<!-- ══════════ 4 ══════════ -->
+<h2 id="s4">4. Read · Process · Write</h2>
+<p>논문이 제안하는 모델은 세 블록입니다.</p>
+<div class="mat">  x₁ x₂ … xₙ            (순서 없는 입력 집합)
+     │  Read     : 같은 작은 신경망으로 하나씩 임베딩 → 메모리 m₁ … mₙ
+     ▼
+  ┌──────────┐
+  │ Process  │ : 입력 없는 LSTM이 T번 돌며 메모리를 어텐션으로 읽음 → q*_T
+  └──────────┘
+     ▼
+     Write    : 포인터 네트워크 LSTM이 q*_T에서 출발해 mᵢ를 하나씩 가리킴</div>
+
+<h3>Process 블록 — 입력 없이 생각하는 LSTM</h3>
+<p>핵심은 가운데 블록입니다. 이 LSTM에는 입력 토큰이 들어가지 않습니다. 자기 상태로 질의 \(q_t\)를 만들고, 그 질의로 메모리를 읽고, 읽은 것을 다시 상태에 붙여 다음 스텝으로 넘깁니다.</p>
+<div class="eq">$$\begin{aligned}
+q_t &= \mathrm{LSTM}(q^{*}_{t-1}) && (3)\\
+e_{i,t} &= f(m_i, q_t) && (4)\\
+a_{i,t} &= \frac{\exp(e_{i,t})}{\sum_j \exp(e_{j,t})} && (5)\\
+r_t &= \textstyle\sum_i a_{i,t}\, m_i && (6)\\
+q^{*}_t &= [\,q_t \;\; r_t\,] && (7)
+\end{aligned}$$
+<span class="note">\(f\)는 내적 같은 점수 함수. 식 (4)–(6)은 각 메모리에 독립적으로 점수를 매기고 정규화한 뒤 가중합한다. 메모리 순서를 바꾸면 점수와 가중치가 메모리와 함께 자리를 옮길 뿐, 합 \(r_t\)는 그대로다. 그래서 \(q^*_t\)도, 최종 \(q^*_T\)도 순열 불변이다.</span></div>
+<p>T는 "몇 번 생각할 것인가"입니다. 한 번 읽고 끝내는 대신, 앞에서 읽은 내용을 바탕으로 다른 곳을 다시 볼 수 있습니다. Memory Network나 Neural Turing Machine의 특수한 경우라고 볼 수 있습니다.</p>
+
+<div class="demo">
+  <h4>데모 3 · Process 블록을 실제로 계산하기</h4>
+  <p class="cap">식 (3)–(7)을 그대로 구현했습니다(무작위 고정 가중치, 메모리 4차원, LSTM 은닉 4차원, f = 내적). 행은 처리 스텝 t, 열은 메모리 슬롯, 칸 값은 어텐션 가중치 a<sub>i,t</sub>. "메모리 섞기"를 누르면 열이 숫자와 함께 자리를 옮기지만 각 숫자가 받는 가중치와 최종 q*<sub>T</sub>는 변하지 않습니다. 같은 입력을 데모 1의 RNN에 넣었을 때와 비교해 보세요.</p>
+  <div class="ctrls"><div class="ctrl"><label>처리 스텝 T <b id="d3Tv">5</b></label><input type="range" id="d3T" min="1" max="10" value="5"></div></div>
+  <div class="hm" id="d3hm"></div>
+  <div class="vec" id="d3vec"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>처음 순서의 q*<sub>T</sub></span><span><i style="background:var(--s2);opacity:.75"></i>지금 순서의 q*<sub>T</sub></span></div>
+  <div class="readout">
+    <div>Process 블록 ‖Δq*<sub>T</sub>‖<b id="d3diff">–</b></div>
+    <div>같은 입력, RNN 인코더 ‖Δh‖<b id="d3rnn">–</b></div>
+  </div>
+  <div class="btns"><button id="d3shuf">메모리 섞기</button><button id="d3reset">처음 순서로</button><button id="d3new">새 숫자</button></div>
+</div>
+
+<h3>Write 블록 — 포인터 네트워크와 glimpse</h3>
+<p>정렬처럼 답이 "입력 중 어느 것"인 문제에서는 고정 어휘 소프트맥스 대신 <strong>포인터 네트워크</strong>를 씁니다. 디코더의 각 스텝에서 입력 위치들에 대한 어텐션 분포 자체를 출력 분포로 쓰는 것입니다. 원래 Pointer Networks는 이 분포를 읽기(가중합)에 쓰지 않고 바로 손실에만 썼습니다.</p>
+<p>이 논문은 가리키기 직전에 <strong>한 번 더 어텐션으로 읽는 단계</strong>를 넣고 이를 <em>glimpse</em>라 부릅니다. Process 블록과 비슷하지만, Process가 출력 전에 몰아서 생각한다면 glimpse는 출력 하나하나 사이에 끼어들어 "지금까지 뭘 골랐지?"를 다시 확인합니다. 아래 표 1에서 보듯 두 장치는 서로를 보완합니다.</p>
+
+<!-- ══════════ 5 ══════════ -->
+<h2 id="s5">5. 정렬 실험 (표 1)</h2>
+<p>과제: 0과 1 사이 실수 N개를 받아 오름차순 인덱스를 내놓기. 비교 대상은 입력을 LSTM으로 읽는 기본 Ptr-Net과, 인코더만 Read-Process로 바꾼 모델입니다. 정확도는 <strong>N개를 전부 맞게 정렬한 비율</strong>이고, 모두 10,000 반복 후(수렴, 과적합 없음) 값입니다.</p>
+
+<div class="demo">
+  <h4>데모 4 · 표 1 살펴보기</h4>
+  <p class="cap">논문 표 1의 숫자를 그대로 옮겼습니다. N을 바꿔 보세요.</p>
+  <div class="btns" id="d4N"><button data-n="5" aria-pressed="true">N = 5</button><button data-n="10" aria-pressed="false">N = 10</button><button data-n="15" aria-pressed="false">N = 15</button></div>
+  <div id="d4bars"></div>
+  <div class="legend"><span><i style="background:var(--axis)"></i>glimpse 0</span><span><i style="background:var(--s1)"></i>glimpse 1</span></div>
+</div>
+<p>읽을거리가 네 가지 있습니다.</p>
+<ul>
+  <li><strong>P = 0이면 Ptr-Net보다 못하다.</strong> 처리 스텝이 0이고 glimpse도 0이면 Write 블록은 입력에 대한 요약을 하나도 받지 못한 채 "눈을 감고" 가리켜야 합니다(N=5에서 65% vs 81%).</li>
+  <li><strong>P ≥ 1이면 역전된다.</strong> 한 번이라도 메모리를 읽게 하면 Ptr-Net을 넘어서고, 대체로 스텝이 늘수록 좋아집니다(N=10, glimpse 1에서 28% → 44% → 57%).</li>
+  <li><strong>glimpse는 둘 다를 크게 끌어올린다.</strong> 어려운 경우엔 두 배가 넘습니다(Ptr-Net N=10: 8% → 28%).</li>
+  <li><strong>N이 커지면 전부 무너진다.</strong> N=15에서는 최고가 10%입니다.</li>
+</ul>
+
+<div class="demo">
+  <h4>데모 4b · N이 커지면 왜 이렇게 급격히 떨어질까</h4>
+  <p class="cap">두 가지 효과가 겹칩니다. ① "전부 맞아야 정답"이므로 스텝당 정확도가 p면 대략 p<sup>N</sup>. ② N이 커지면 숫자들이 촘촘해져 각 스텝 자체가 어려워집니다. 아래는 브라우저가 균등분포에서 직접 뽑아 잰 "가장 가까운 두 수의 간격"입니다.</p>
+  <div class="ctrls"><div class="ctrl"><label>스텝당 정확도 p <b id="d4pv">0.988</b></label><input type="range" id="d4p" min="900" max="999" value="988"></div></div>
+  <div class="tw"><table id="d4tab"></table></div>
+  <p class="cap" style="margin:6px 0 0">p = 0.988은 N=5 최고 기록 94%에 맞춘 값(0.988⁵ ≈ 0.94). 같은 p로는 N=10에서 89%가 나와야 하지만 실제 최고는 57% — 스텝 자체가 어려워졌다는 뜻입니다. 최소 간격 열이 그 이유를 보여 줍니다.</p>
+</div>
+
+<!-- ══════════ 6 ══════════ -->
+<h2 id="s6">6. 출력 순서도 중요하다</h2>
+<p>출력도 같은 질문을 받습니다. 체인 룰은 독립 가정 없는 가장 단순한 분해이므로, LSTM처럼 강력한 모델이면 어떤 순서든 통해야 합니다. 논문 5.1절은 실제로는 그렇지 않음을 세 과제에서 보입니다.</p>
+
+<h3>6.1 언어 모델 — 3단어씩 뒤집기</h3>
+<p>Penn Treebank에서 Zaremba 외(2014)의 중간 크기 LSTM을 세 가지 순서로 따로 학습했습니다.</p>
+<div class="demo">
+  <h4>데모 5 · 문장을 세 가지 순서로</h4>
+  <p class="cap">논문 예시와 같은 규칙입니다. 3-word는 앞에서부터 3단어씩 자르고(모자라면 &lt;pad&gt;) 각 묶음을 뒤집습니다.</p>
+  <input type="text" id="d5in" value="This is a sentence .">
+  <div class="tw"><table id="d5tab"></table></div>
+</div>
+<p>순방향과 역방향은 둘 다 검증 퍼플렉시티 <strong>86</strong>으로 같았습니다. 3-word 뒤집기는 고차 n-gram을 다 흩뜨리는데도 <strong>96</strong>, 겨우 10 나빠졌습니다. 다만 학습 퍼플렉시티도 10 높았다는 점이 중요합니다. 과적합이 아니라 <strong>어색한 순서 때문에 학습 자체가 어려웠다</strong>는 뜻입니다.</p>
+
+<h3>6.2 파싱 — 깊이 우선 vs 너비 우선</h3>
+<p>Grammar as a Foreign Language(Vinyals 외 2015b)는 파스 트리를 깊이 우선으로 펼친 문자열을 출력합니다. 트리를 수열로 바꾸는 방법은 그 밖에도 많습니다. 논문 그림 2:</p>
+<div class="mat">                 S
+       ┌─────────┼──────────┐
+       NP        VP          .
+       │     ┌───┴────┐
+       DT   VBZ       NP
+      This   is    ┌──┴──┐
+                   DT    NN
+                   a   sentence
+
+깊이 우선: S NP DT !DT !NP VP VBZ !VBZ NP DT !DT NN !NN !NP !VP . !. !S
+너비 우선: S LEV NP VP . LEV DT PAR VBZ NP LEV PAR PAR DT NN DONE</div>
+<div class="tw"><table>
+  <tr><th>출력 순서</th><th class="num">F1</th></tr>
+  <tr><td>깊이 우선 (기존)</td><td class="num"><strong>89.5%</strong></td></tr>
+  <tr><td>너비 우선</td><td class="num">81.5%</td></tr>
+</table></div>
+<p>8%p 차이입니다. 게다가 너비 우선 모델은 올바른 트리를 만들지 못한 경우가 많아서 실제 F1은 이보다 더 낮을 것이라고 각주에 적혀 있습니다. 깊이 우선 순서는 문장의 단어 순서와 나란히 진행되는 반면, 너비 우선은 아래층으로 내려갈 때마다 문장 처음으로 돌아가야 합니다.</p>
+
+<h3>6.3 조합 문제 — n!개의 정답</h3>
+<p>더 근본적인 문제는 정답이 여러 개일 때입니다. 정렬 결과를 "(인덱스, 순위) 쌍의 집합"으로 보면, 같은 집합을 내보내는 순서가 n!가지이고 모두 정답입니다. 학습 데이터가 이 중 하나를 무작위로 골라 보여 준다면, 완벽하게 학습된 모델도 확률을 n!개로 나눠 가져야 합니다.</p>
+<div class="demo">
+  <h4>데모 6 · 동치류의 크기</h4>
+  <div class="ctrls"><div class="ctrl"><label>출력 원소 수 n <b id="d6nv">5</b></label><input type="range" id="d6n" min="2" max="15" value="5"></div></div>
+  <div class="readout">
+    <div>가능한 정답 순서 n!<b id="d6f">–</b></div>
+    <div>완벽한 모델이 정답 하나에 줄 수 있는 확률<b id="d6p">–</b></div>
+    <div>피할 수 없는 손실 log n! (nats)<b id="d6l">–</b></div>
+  </div>
+</div>
+<p>그래서 Pointer Networks에서는 동치류를 최대한 좁혔습니다. TSP 경로는 항상 가장 낮은 번호의 도시에서 반시계 방향으로, 삼각분할은 삼각형을 사전순으로. 모든 경우 <strong>정확도가 5%p 이상</strong> 올랐습니다. 반대로 정렬 출력을 n! 순서 중 아무거나로 두면, n=5처럼 작아도 같은 성능에 끝내 도달하지 못했습니다.</p>
+
+<!-- ══════════ 7 ══════════ -->
+<h2 id="s7">7. 별 모양 그래피컬 모델</h2>
+<p>통제된 장난감 실험입니다. 머리 변수 H 하나가 무조건부 분포를 따르고, 나머지 변수들은 모두 H에만 의존합니다(별 모양). 결합분포를 체인 룰로 모델링할 때 H를 맨 앞에 두면 각 조건부가 "H 하나만 보면 되는" 단순한 함수가 되고, 맨 뒤에 두면 각 조건부가 앞의 모든 변수를 종합해 H를 추리해야 합니다.</p>
+<p>논문은 변수 10–50개(각 10가지 값), 학습 데이터 200–20,000개로 두 LSTM(H 처음 / H 마지막)을 비교했고 결과는 이렇습니다.</p>
+<ul>
+  <li>학습 데이터가 충분하면(20,000) 어느 순서든 학습된다.</li>
+  <li>주변분포가 아주 뾰족하면(거의 결정적이면) 역시 순서와 무관하다.</li>
+  <li>그 밖의 모든 경우에는 <strong>최적 순서(H 처음)가 늘 더 쉬웠다</strong>.</li>
+</ul>
+
+<div class="demo">
+  <h4>데모 7 · 엔트로피는 같고, 일의 모양은 다르다</h4>
+  <p class="cap">K=3가지 값을 갖는 변수 n개의 별 모양 분포를 무작위로 만들고, 결합분포를 전부 나열(3ⁿ칸)해 각 순서의 스텝별 조건부 엔트로피 H(X<sub>t</sub> | X<sub>&lt;t</sub>)를 정확히 계산합니다. 막대 길이가 각 스텝의 엔트로피, 전체 길이가 결합 엔트로피입니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>변수 수 n (H 포함) <b id="d7nv">6</b></label><input type="range" id="d7n" min="3" max="8" value="6"></div>
+    <div class="ctrl"><label>뾰족함 β <b id="d7bv">1.5</b></label><input type="range" id="d7b" min="0" max="60" value="15"></div>
+  </div>
+  <div class="grp">H 처음: H, y₁, y₂, …</div><div class="stack" id="d7a"></div>
+  <div class="grp">H 마지막: y₁, y₂, …, H</div><div class="stack" id="d7b2"></div>
+  <div class="readout">
+    <div>결합 엔트로피 (H 처음)<b id="d7ta">–</b></div>
+    <div>결합 엔트로피 (H 마지막)<b id="d7tb">–</b></div>
+    <div>정확한 조건부의 자유 매개변수 (H 처음)<b id="d7ca">–</b></div>
+    <div>정확한 조건부의 자유 매개변수 (H 마지막)<b id="d7cb">–</b></div>
+  </div>
+  <div class="btns"><button id="d7new">새 분포</button></div>
+  <p class="cap" style="margin:10px 0 0">두 결합 엔트로피는 항상 같습니다(체인 룰). 다른 것은 각 스텝의 조건부를 정확히 표현하는 데 필요한 문맥입니다. H 처음이면 y마다 K×K 표 하나면 되지만, H 마지막이면 t번째 변수는 앞의 t−1개 전부에 의존해 K<sup>t−1</sup>×K 표가 필요합니다. 데이터가 적을 때 LSTM이 이 복잡한 조건부를 배우기 어렵다는 것이 실험 결과입니다. β를 크게 하면 y₁ 하나로 H가 거의 정해져 H 마지막 순서의 뒤쪽 엔트로피가 0에 붙는데, 논문의 "뾰족하면 순서 무관"과 같은 이야기입니다.</p>
+</div>
+
+<!-- ══════════ 8 ══════════ -->
+<h2 id="s8">8. 학습하면서 순서 찾기 (식 9)</h2>
+<p>좋은 순서를 미리 모를 때는 어떻게 할까요? 논문의 답은 단순합니다. <strong>모델이 고르게 하자.</strong> 학습 예제마다 로그우도를 최대화하는 대신, 가능한 순서 π에 대해서도 최대화합니다.</p>
+<div class="eq">$$\theta^{*} = \arg\max_{\theta} \sum_i \max_{\pi(X_i)} \log p\big(Y_{\pi(X_i)} \mid X_i;\, \theta\big) \qquad (9)$$
+<span class="note">X가 없는(비어 있는) 경우도 포함한다. 비볼록이라 일반 최대우도보다 엄밀히 낫다는 보장은 없지만 실제로는 문제가 되지 않았다고 한다.</span></div>
+<p>순진하게 매 스텝 최댓값 순서를 고르면 두 문제가 생깁니다. n!개를 다 평가해야 하고, 더 나쁜 것은 <strong>초기 파라미터가 우연히 선호한 순서에 영원히 갇힌다</strong>는 점입니다. 고른 순서로 학습하면 그 순서가 더 좋아지고, 그래서 또 고르게 되니까요. 그래서 두 가지를 더합니다.</p>
+<ol>
+  <li><strong>사전학습:</strong> 처음 1,000스텝은 max 대신 모든 순서에 대한 균등 평균(Σ<sub>π</sub>)으로 학습한다.</li>
+  <li><strong>샘플링:</strong> 그 뒤에는 p(Y<sub>π</sub>|X)에 비례하는 확률로 순서를 하나 뽑는다. 왼쪽에서 오른쪽으로 조상 샘플링을 하면 모델 평가 한 번(O(1))이면 된다 — n!번이 아니라.</li>
+</ol>
+
+<h3>5-gram 실험 (표 2)</h3>
+<p>단어 5개를 (단어, 위치) 쌍의 집합으로 바꿔서 원래 순서 정보를 잃지 않으면서 마음대로 섞을 수 있게 했습니다. 예: <code>(This,1) (is,2) (a,3) (five,4) (gram,5)</code>.</p>
+<div class="tw"><table>
+  <tr><th>학습 순서</th><th class="num">고려한 순서 수</th><th class="num">검증 퍼플렉시티</th></tr>
+  <tr><td class="mono">(1,2,3,4,5) 고정</td><td class="num">1</td><td class="num"><strong>225</strong></td></tr>
+  <tr><td class="mono">(5,1,3,4,2) 고정</td><td class="num">1</td><td class="num">280</td></tr>
+  <tr><td>Easy: 위 둘이 반반 섞인 데이터</td><td class="num">2</td><td class="num"><strong>225</strong></td></tr>
+  <tr><td>Hard: 5! 순서가 균등하게 섞인 데이터</td><td class="num">120</td><td class="num"><strong>225</strong></td></tr>
+</table></div>
+<p>Easy에서는 사전학습 후 곧바로 자연 순서로 수렴했습니다. Hard에서는 (1,2,3,4,5), (5,4,3,2,1)과 그 작은 변형들로 수렴했고, 어느 쪽이든 최종 퍼플렉시티는 225였습니다. 사전 지식 없이 좋은 순서를 찾아낸 것입니다. (문맥 없는 5-gram이라 6.1절의 86보다 훨씬 높습니다.)</p>
+
+<div class="demo">
+  <h4>데모 8 · max 탐색 vs 조상 샘플링</h4>
+  <p class="cap">원소 5개짜리 집합 <code>(This,1) (is,2) (a,3) (five,4) (gram,5)</code>을 출력하는 작은 포인터 모델을 손으로 만들었습니다. 매 스텝 남은 원소 중 하나를 softmax로 고르는데, 점수는 −β·|j − (직전 위치 + 1)|입니다(첫 스텝은 양 끝을 선호). 따라서 자연 순서와 역순이 가장 그럴듯합니다. 120가지 순서의 확률 p(Y<sub>π</sub>)를 전부 계산해 상위 10개를 보여 주고, "샘플 뽑기"는 왼쪽에서 오른쪽으로 한 스텝씩 뽑습니다.</p>
+  <div class="ctrls"><div class="ctrl"><label>모델의 선호 강도 β <b id="d8bv">1.0</b></label><input type="range" id="d8b" min="0" max="40" value="10"></div></div>
+  <div id="d8bars"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>정확한 확률 p(Y<sub>π</sub>)</span><span><i style="background:var(--s2)"></i>지금까지 뽑은 샘플의 비율</span></div>
+  <div class="rowlbl">마지막 샘플 (스텝별 선택 확률)</div><div class="chips" id="d8last"></div>
+  <div class="readout">
+    <div>max를 정확히 구하려면<b>120번 평가</b></div>
+    <div>샘플 하나에 드는 비용<b>1번 (5스텝)</b></div>
+    <div>샘플이 max 순서와 같을 확률<b id="d8pmax">–</b></div>
+    <div>뽑은 샘플 수<b id="d8n">0</b></div>
+  </div>
+  <div class="btns"><button id="d8one">샘플 뽑기</button><button id="d8many">100개 뽑기</button><button id="d8clr">초기화</button></div>
+</div>
+<p>β가 작으면(학습 초기) 샘플은 120가지 순서에 흩어져 여러 순서를 골고루 탐색하고, β가 크면(모델이 한쪽을 선호하게 되면) 샘플이 max 순서에 몰립니다. 샘플링은 탐색에서 활용으로 저절로 넘어가면서도 매번 n!개를 평가할 필요가 없습니다. 논문은 이렇게 뽑은 순서로 학습해 순진한 max 탐색보다 수렴이 좋았다고 보고합니다.</p>
+
+<!-- ══════════ 9 ══════════ -->
+<h2 id="s9">9. 그 뒤의 이야기</h2>
+<p>이 논문이 던진 두 질문은 이후 연구의 뼈대가 됩니다.</p>
+<ul>
+  <li><strong>입력 집합:</strong> Read-Process-Write의 "원소별 임베딩 + 순열 불변 집계"는 Deep Sets(Zaheer 외 2017)의 \(\rho(\sum_i \phi(x_i))\) 정리로 형식화되고, Set Transformer(Lee 외 2019)는 원소끼리 셀프 어텐션을 주고받게 해 Process 블록을 강화합니다. 위치 인코딩을 뺀 Transformer 인코더는 그 자체로 순열 등변(permutation equivariant)입니다.</li>
+  <li><strong>출력 집합:</strong> "모델이 쉬운 순서를 고르게 한다"는 식 9의 아이디어는, 예측과 정답을 최적으로 짝지은 뒤 손실을 매기는 방식으로 이어집니다. DETR(Carion 외 2020)이 물체 집합을 헝가리안 매칭 손실로 예측하는 것이 대표적입니다. 매칭은 "정답 순서 중 모델에 가장 유리한 것을 고르는" 식 9의 max를 다항 시간에 정확히 푸는 것으로 볼 수 있습니다.</li>
+  <li><strong>순서의 prior:</strong> 번역 입력 뒤집기는 어텐션이 나오며 필요 없어졌지만, "어떤 순서로 생성하느냐"는 질문은 비자기회귀 생성, 삽입 기반 생성 등에서 계속 다뤄집니다.</li>
+</ul>
+<p>시리즈의 관련 자료: <a href="https://dev-jonghoonpark.github.io/how-seq2seq-works/">How seq2seq Works</a>(입력 역순 트릭) · <a href="https://dev-jonghoonpark.github.io/how-attention-works/">How Attention Works</a>(내용 기반 어텐션, Pointer Networks) · <a href="https://dev-jonghoonpark.github.io/how-positional-encoding-works/">How Positional Encoding Works</a>(어텐션은 순서를 모른다)</p>
+
+<!-- ══════════ 퀴즈 ══════════ -->
+<h2 id="quizSec">퀴즈</h2>
+<div id="quiz"></div>
+<div class="quiz-score" id="quizScore"></div>
+
+<footer>
+  <p class="refs">Vinyals, O., Bengio, S., &amp; Kudlur, M. (2016). Order Matters: Sequence to Sequence for Sets. ICLR. <a href="https://arxiv.org/abs/1511.06391">arXiv:1511.06391</a><br>
+  Vinyals, O., Fortunato, M., &amp; Jaitly, N. (2015). Pointer Networks. NeurIPS. <a href="https://arxiv.org/abs/1506.03134">arXiv:1506.03134</a><br>
+  Sutskever, I., Vinyals, O., &amp; Le, Q. V. (2014). Sequence to Sequence Learning with Neural Networks. NeurIPS. <a href="https://arxiv.org/abs/1409.3215">arXiv:1409.3215</a><br>
+  Vinyals, O. 외 (2015). Grammar as a Foreign Language. NeurIPS. <a href="https://arxiv.org/abs/1412.7449">arXiv:1412.7449</a></p>
+  <p>표 1·표 2와 본문 수치는 논문에서 그대로 옮겼습니다. 데모 1·3·7·8은 브라우저가 실제로 계산한 값입니다(가중치는 무작위 고정 또는 손으로 정한 값이며 학습된 모델이 아닙니다).</p>
+  <p><a href="https://github.com/dev-jonghoonpark/how-set2seq-works">GitHub</a> · <a href="https://github.com/dev-jonghoonpark/how-ai-works">how-ai-works</a> 시리즈</p>
+</footer>
+</div>
+
+<script>
+var $=function(s){return document.querySelector(s);};
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function f(x,d){return (Math.abs(x)<0.5*Math.pow(10,-d)?0:x).toFixed(d);}
+function rng(seed){var a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;var t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+function gauss(r){var u=1-r(),v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function mat(r,rows,cols,sc){var M=[];for(var i=0;i<rows;i++){var row=[];for(var j=0;j<cols;j++)row.push(gauss(r)*sc);M.push(row);}return M;}
+function mv(M,x){return M.map(function(row){var s=0;for(var j=0;j<row.length;j++)s+=row[j]*x[j];return s;});}
+function add(a,b){return a.map(function(v,i){return v+b[i];});}
+function sig(x){return 1/(1+Math.exp(-x));}
+function norm(a){return Math.sqrt(a.reduce(function(s,v){return s+v*v;},0));}
+function sub(a,b){return a.map(function(v,i){return v-b[i];});}
+function shuffle(a,r){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor((r?r():Math.random())*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}return a;}
+function setupCanvas(cv){var dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=+cv.getAttribute('height');
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+'px';var c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);return {c:c,w:w,h:h};}
+function chips(el,arr,on){el.innerHTML=arr.map(function(v,i){return '<span class="chip'+(on&&on(i)?' on':'')+'">'+v+'</span>';}).join('');}
+function randNums(n){var a=[];for(var i=0;i<n;i++)a.push(Math.round(Math.random()*100)/100);return a;}
+
+/* 공유 가중치 */
+var R0=rng(7);
+var RNN={Wx:mat(R0,8,1,1.2),Wh:mat(R0,8,8,0.55),b:mat(R0,8,1,0.3).map(function(r){return r[0];})};
+var EMB={W:mat(R0,8,1,1.5),b:mat(R0,8,1,0.5).map(function(r){return r[0];})};
+function rnnEncode(xs){var h=[0,0,0,0,0,0,0,0];xs.forEach(function(x){h=add(add(mv(RNN.Wx,[x]),mv(RNN.Wh,h)),RNN.b).map(Math.tanh);});return h;}
+function sumEncode(xs){var s=[0,0,0,0,0,0,0,0];xs.forEach(function(x){s=add(s,add(mv(EMB.W,[x]),EMB.b).map(Math.tanh));});return s;}
+
+function vecRows(el,rows,scale){
+  el.innerHTML=rows.map(function(r){
+    return '<div>'+r.label+'</div><div class="bars">'+r.a.map(function(v,i){
+      var b=r.b[i],sa=Math.max(-1,Math.min(1,v/scale)),sb=Math.max(-1,Math.min(1,b/scale));
+      function bar(s,col,op,left){var top=s>=0?(50-50*s):50,h=Math.abs(50*s);
+        return '<i style="background:'+col+';opacity:'+op+';top:'+top+'%;height:'+h+'%;'+(left?'right:50%':'left:50%')+'"></i>';}
+      return '<span>'+bar(sa,'var(--s1)',1,true)+bar(sb,'var(--s2)',0.75,false)+'</span>';
+    }).join('')+'</div>';
+  }).join('');
+}
+
+/* ══════ 데모 1 ══════ */
+var d1x=[0.4,0.1,0.9,0.25,0.7],d1y=d1x.slice();
+function drawD1(){
+  chips($('#d1a'),d1x);chips($('#d1b'),d1y);
+  var ha=rnnEncode(d1x),hb=rnnEncode(d1y),sa=sumEncode(d1x),sb=sumEncode(d1y);
+  vecRows($('#d1vec'),[{label:'RNN 마지막 상태',a:ha,b:hb},{label:'임베딩 합',a:sa,b:sb}],Math.max(1,Math.max.apply(null,sa.concat(sb).map(Math.abs))));
+  $('#d1rnn').textContent=f(norm(sub(ha,hb)),4);$('#d1sum').textContent=f(norm(sub(sa,sb)),4);
+}
+$('#d1shuf').onclick=function(){var t;do{t=shuffle(d1x);}while(t.join()===d1y.join());d1y=t;drawD1();};
+$('#d1new').onclick=function(){d1x=randNums(5);d1y=shuffle(d1x);drawD1();};
+
+/* ══════ 데모 2 ══════ */
+var d2pts=[],d2mode='rand',d2lab=[];
+function d2gen(){d2pts=[];for(var i=0;i<10;i++)d2pts.push([0.08+Math.random()*0.84,0.08+Math.random()*0.84]);d2label();}
+function d2label(){
+  var n=d2pts.length,idx=[];for(var i=0;i<n;i++)idx.push(i);
+  if(d2mode==='rand'){d2lab=shuffle(idx);}
+  else{ // 가장 아래(y 최소 = 화면상 맨 아래) 점 기준 각도순
+    var p0=0;for(i=1;i<n;i++)if(d2pts[i][1]>d2pts[p0][1])p0=i;
+    var ord=idx.filter(function(i){return i!==p0;}).sort(function(a,b){
+      return Math.atan2(-(d2pts[a][1]-d2pts[p0][1]),d2pts[a][0]-d2pts[p0][0])-Math.atan2(-(d2pts[b][1]-d2pts[p0][1]),d2pts[b][0]-d2pts[p0][0]);});
+    d2lab=new Array(n);d2lab[p0]=0;ord.forEach(function(p,k){d2lab[p]=k+1;});
+  }
+}
+function hull(P){ // monotone chain, 수학 좌표(y 위로)에서 반시계
+  var idx=P.map(function(_,i){return i;}).sort(function(a,b){return P[a][0]-P[b][0]||P[a][1]-P[b][1];});
+  function cr(o,a,b){return (P[a][0]-P[o][0])*(P[b][1]-P[o][1])-(P[a][1]-P[o][1])*(P[b][0]-P[o][0]);}
+  var lo=[],up=[];idx.forEach(function(i){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],i)<=0)lo.pop();lo.push(i);});
+  idx.slice().reverse().forEach(function(i){while(up.length>=2&&cr(up[up.length-2],up[up.length-1],i)<=0)up.pop();up.push(i);});
+  return lo.slice(0,-1).concat(up.slice(0,-1));
+}
+function drawD2(){
+  var g=setupCanvas($('#d2c')),c=g.c,W=g.w,H=g.h,S=Math.min(W,H);
+  var ox=(W-S)/2;function X(p){return ox+p[0]*S;}function Y(p){return p[1]*H;}
+  var M=d2pts.map(function(p){return [p[0],1-p[1]];});
+  var h=hull(M);
+  var start=0;for(var k=1;k<h.length;k++)if(d2lab[h[k]]<d2lab[h[start]])start=k;
+  h=h.slice(start).concat(h.slice(0,start));
+  c.clearRect(0,0,W,H);
+  c.strokeStyle=css('--s1');c.lineWidth=2;c.fillStyle=css('--wash');c.beginPath();
+  h.forEach(function(i,k){var p=d2pts[i];k?c.lineTo(X(p),Y(p)):c.moveTo(X(p),Y(p));});c.closePath();c.fill();c.stroke();
+  d2pts.forEach(function(p,i){var on=h.indexOf(i)>=0;
+    c.beginPath();c.arc(X(p),Y(p),on?11:9,0,7);c.fillStyle=on?css('--s1'):css('--surface-1');c.fill();
+    c.strokeStyle=on?css('--s1'):css('--axis');c.lineWidth=1.5;c.stroke();
+    c.fillStyle=on?'#fff':css('--text-secondary');c.font='600 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(d2lab[i],X(p),Y(p)+0.5);});
+  var out=h.map(function(i){return d2lab[i];});
+  chips($('#d2out'),out);
+  var back=0;for(k=1;k<out.length;k++)if(out[k]<out[k-1])back++;
+  $('#d2back').textContent=back+'번';
+}
+$('#d2rand').onclick=function(){d2mode='rand';$('#d2rand').setAttribute('aria-pressed','true');$('#d2ang').setAttribute('aria-pressed','false');d2label();drawD2();};
+$('#d2ang').onclick=function(){d2mode='ang';$('#d2ang').setAttribute('aria-pressed','true');$('#d2rand').setAttribute('aria-pressed','false');d2label();drawD2();};
+$('#d2new').onclick=function(){d2gen();drawD2();};
+
+/* ══════ 데모 3 ══════ */
+var R3=rng(42),D3=4;
+var P3={We:mat(R3,D3,1,2.0),be:mat(R3,D3,1,0.6).map(function(r){return r[0];}),
+  W:mat(R3,4*D3,2*D3,0.9),b:mat(R3,4*D3,1,0.4).map(function(r){return r[0];}),q0:mat(R3,2*D3,1,0.5).map(function(r){return r[0];})};
+function readBlock(x){return add(mv(P3.We,[x]),P3.be).map(Math.tanh);}
+function processBlock(xs,T){
+  var m=xs.map(readBlock),qs=P3.q0.slice(),c=[0,0,0,0],A=[];
+  for(var t=0;t<T;t++){
+    var z=add(mv(P3.W,qs),P3.b),q=[];
+    for(var k=0;k<D3;k++){var ig=sig(z[k]),fg=sig(z[D3+k]),og=sig(z[2*D3+k]),gg=Math.tanh(z[3*D3+k]);
+      c[k]=fg*c[k]+ig*gg;q.push(og*Math.tanh(c[k]));}
+    var e=m.map(function(mi){var s=0;for(var k=0;k<D3;k++)s+=mi[k]*q[k];return 3*s;});
+    var mx=Math.max.apply(null,e),ex=e.map(function(v){return Math.exp(v-mx);}),Z=ex.reduce(function(a,b){return a+b;},0);
+    var a=ex.map(function(v){return v/Z;});A.push(a);
+    var r=[0,0,0,0];m.forEach(function(mi,i){for(var k=0;k<D3;k++)r[k]+=a[i]*mi[k];});
+    qs=q.concat(r);
+  }
+  return {qs:qs,A:A};
+}
+var d3x0=[0.82,0.15,0.47,0.66,0.31,0.05],d3x=d3x0.slice();
+function heat(v){var a=Math.min(1,Math.max(0,(v-0.05)*3));return 'background:rgba(42,120,214,'+(0.06+0.85*a).toFixed(3)+');color:'+(a>0.55?'#fff':'var(--text-primary)');}
+function drawD3(){
+  var T=+$('#d3T').value;$('#d3Tv').textContent=T;
+  var P=processBlock(d3x,T),P0=processBlock(d3x0,T),n=d3x.length;
+  var hm=$('#d3hm');hm.style.gridTemplateColumns='44px repeat('+n+',1fr)';
+  var html='<span class="h"></span>'+d3x.map(function(v){return '<span class="h">x = '+v.toFixed(2)+'</span>';}).join('');
+  P.A.forEach(function(a,t){html+='<span class="h">t='+(t+1)+'</span>'+a.map(function(v){return '<span style="'+heat(v)+'">'+v.toFixed(2)+'</span>';}).join('');});
+  hm.innerHTML=html;
+  vecRows($('#d3vec'),[{label:'q*_T = [q, r]',a:P0.qs,b:P.qs}],1);
+  $('#d3diff').textContent=norm(sub(P.qs,P0.qs)).toExponential(1).replace('0.0e+0','0');
+  $('#d3rnn').textContent=f(norm(sub(rnnEncode(d3x),rnnEncode(d3x0))),4);
+}
+$('#d3T').oninput=drawD3;
+$('#d3shuf').onclick=function(){var t;do{t=shuffle(d3x);}while(t.join()===d3x.join());d3x=t;drawD3();};
+$('#d3reset').onclick=function(){d3x=d3x0.slice();drawD3();};
+$('#d3new').onclick=function(){d3x0=randNums(6);d3x=d3x0.slice();drawD3();};
+
+/* ══════ 데모 4 ══════ */
+var T1={5:[[81,90],[65,84],[84,92],[88,94],[90,94]],10:[[8,28],[7,30],[14,44],[17,57],[19,50]],15:[[0,4],[1,2],[0,5],[2,4],[0,10]]};
+var T1L=['Ptr-Net (LSTM 입력)','P = 0 step','P = 1 step','P = 5 steps','P = 10 steps'],d4N=5;
+function drawD4(){
+  var html='';T1[d4N].forEach(function(row,i){
+    html+='<div class="grp">'+T1L[i]+'</div>';
+    row.forEach(function(v,g){html+='<div class="hbar"><span style="color:var(--text-secondary)">glimpse '+g+'</span><div class="track"><i style="width:'+v+'%;background:'+(g?'var(--s1)':'var(--axis)')+'"></i></div><b>'+v+'%</b></div>';});
+  });$('#d4bars').innerHTML=html;
+}
+document.querySelectorAll('#d4N button').forEach(function(b){b.onclick=function(){d4N=+b.dataset.n;
+  document.querySelectorAll('#d4N button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false');});drawD4();};});
+var d4gap={};(function(){[5,10,15].forEach(function(N){var s=0,M=4000;for(var k=0;k<M;k++){var a=[];for(var i=0;i<N;i++)a.push(Math.random());a.sort();var g=1;for(i=1;i<N;i++)g=Math.min(g,a[i]-a[i-1]);s+=g;}d4gap[N]=s/M;});})();
+function drawD4b(){
+  var p=+$('#d4p').value/1000;$('#d4pv').textContent=p.toFixed(3);
+  var best={5:94,10:57,15:10},html='<tr><th class="num">N</th><th class="num">p<sup>N</sup></th><th class="num">논문 최고 정확도</th><th class="num">가장 가까운 두 수의 평균 간격</th></tr>';
+  [5,10,15].forEach(function(N){html+='<tr><td class="num">'+N+'</td><td class="num">'+(100*Math.pow(p,N)).toFixed(1)+'%</td><td class="num">'+best[N]+'%</td><td class="num">'+d4gap[N].toFixed(4)+'</td></tr>';});
+  $('#d4tab').innerHTML=html;
+}
+$('#d4p').oninput=drawD4b;
+
+/* ══════ 데모 5 ══════ */
+function drawD5(){
+  var w=$('#d5in').value.trim().split(/\s+/).filter(Boolean),t3=[];
+  for(var i=0;i<w.length;i+=3){var g=w.slice(i,i+3);while(g.length<3)g.push('<pad>');t3=t3.concat(g.reverse());}
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+  $('#d5tab').innerHTML='<tr><th>순서</th><th>모델이 보는 수열</th><th class="num">검증 PPL</th></tr>'+
+    '<tr><td>Natural</td><td class="mono">'+esc(w.join(' '))+'</td><td class="num">86</td></tr>'+
+    '<tr><td>Reverse</td><td class="mono">'+esc(w.slice().reverse().join(' '))+'</td><td class="num">86</td></tr>'+
+    '<tr><td>3-word</td><td class="mono">'+esc(t3.join(' '))+'</td><td class="num">96</td></tr>';
+}
+$('#d5in').oninput=drawD5;
+
+/* ══════ 데모 6 ══════ */
+function drawD6(){var n=+$('#d6n').value,F=1,L=0;for(var i=2;i<=n;i++){F*=i;L+=Math.log(i);}
+  $('#d6nv').textContent=n;$('#d6f').textContent=F.toLocaleString();$('#d6p').textContent='1/'+F.toLocaleString()+(F<1e6?' ≈ '+(1/F).toPrecision(2):'');$('#d6l').textContent=L.toFixed(2);}
+$('#d6n').oninput=drawD6;
+
+/* ══════ 데모 7 ══════ */
+var K7=3,d7seed=11;
+function drawD7(){
+  var n=+$('#d7n').value,beta=+$('#d7b').value/10;$('#d7nv').textContent=n;$('#d7bv').textContent=beta.toFixed(1);
+  var r=rng(d7seed);
+  var prior=[];for(var k=0;k<K7;k++)prior.push(0.5+r());var ps=prior.reduce(function(a,b){return a+b;},0);prior=prior.map(function(v){return v/ps;});
+  var cond=[];for(var j=1;j<n;j++){var Mj=[];for(var h=0;h<K7;h++){var l=[];for(k=0;k<K7;k++)l.push(beta*gauss(r));
+    var mx=Math.max.apply(null,l),e=l.map(function(v){return Math.exp(v-mx);}),Z=e.reduce(function(a,b){return a+b;},0);Mj.push(e.map(function(v){return v/Z;}));}cond.push(Mj);}
+  // 결합 분포 열거: 변수 0 = H, 1..n-1 = y
+  var N=Math.pow(K7,n),P=new Float64Array(N);
+  for(var s=0;s<N;s++){var x=s,v=[];for(var i=0;i<n;i++){v.push(x%K7);x=Math.floor(x/K7);}
+    var p=prior[v[0]];for(j=1;j<n;j++)p*=cond[j-1][v[0]][v[j]];P[s]=p;}
+  function prefEnt(order){ // 접두 결합 엔트로피 → 스텝별 조건부 엔트로피
+    var out=[],prev=0;
+    for(var t=1;t<=n;t++){var vars=order.slice(0,t),mp={};
+      for(var s=0;s<N;s++){var x=s,key=0,v=[];for(var i=0;i<n;i++){v.push(x%K7);x=Math.floor(x/K7);}
+        for(i=0;i<t;i++)key=key*K7+v[vars[i]];mp[key]=(mp[key]||0)+P[s];}
+      var Hh=0;for(var kk in mp){var q=mp[kk];if(q>0)Hh-=q*Math.log2(q);}
+      out.push(Hh-prev);prev=Hh;}
+    return out;}
+  var oa=[0],ob=[];for(i=1;i<n;i++){oa.push(i);ob.push(i);}ob.push(0);
+  var ea=prefEnt(oa),eb=prefEnt(ob),tot=n*Math.log2(K7);
+  function stack(el,ent,order){el.innerHTML=ent.map(function(e,t){var isH=order[t]===0,w=100*e/tot;
+    return '<span title="'+(isH?'H':'y'+order[t])+': '+e.toFixed(3)+' bits" style="width:'+w+'%;background:'+(isH?'var(--s2)':(t%2?'var(--s1)':'var(--s4)'))+'">'+(w>6?(isH?'H':'y'+order[t])+' '+e.toFixed(2):'')+'</span>';}).join('');}
+  stack($('#d7a'),ea,oa);stack($('#d7b2'),eb,ob);
+  var sa=ea.reduce(function(a,b){return a+b;},0),sb=eb.reduce(function(a,b){return a+b;},0);
+  $('#d7ta').textContent=sa.toFixed(4)+' bits';$('#d7tb').textContent=sb.toFixed(4)+' bits';
+  var ca=K7-1+(n-1)*K7*(K7-1),cb=0;for(t=0;t<n;t++)cb+=Math.pow(K7,t)*(K7-1);
+  $('#d7ca').textContent=ca.toLocaleString()+' 개';$('#d7cb').textContent=cb.toLocaleString()+' 개';
+}
+$('#d7n').oninput=drawD7;$('#d7b').oninput=drawD7;$('#d7new').onclick=function(){d7seed=Math.floor(Math.random()*1e9);drawD7();};
+
+/* ══════ 데모 8 ══════ */
+function perms(a){if(a.length<2)return [a];var o=[];a.forEach(function(x,i){perms(a.slice(0,i).concat(a.slice(i+1))).forEach(function(p){o.push([x].concat(p));});});return o;}
+var PERMS=perms([1,2,3,4,5]),W8=['This','is','a','five','gram'],d8cnt={},d8tot=0,d8lastS=null;
+function d8probs(prev,rem,beta){ // prev=0 이면 첫 스텝
+  var sc=rem.map(function(j){return prev===0?-beta*Math.min(j-1,5-j):-beta*Math.abs(j-prev-1);});
+  var mx=Math.max.apply(null,sc),e=sc.map(function(v){return Math.exp(v-mx);}),Z=e.reduce(function(a,b){return a+b;},0);
+  return e.map(function(v){return v/Z;});}
+function d8seqP(o,beta){var rem=[1,2,3,4,5],prev=0,p=1;o.forEach(function(j){var pr=d8probs(prev,rem,beta);p*=pr[rem.indexOf(j)];rem.splice(rem.indexOf(j),1);prev=j;});return p;}
+function d8sample(){var beta=+$('#d8b').value/10,rem=[1,2,3,4,5],prev=0,o=[],ps=[];
+  while(rem.length){var pr=d8probs(prev,rem,beta),u=Math.random(),k=0;for(;k<pr.length-1;k++){u-=pr[k];if(u<=0)break;}
+    o.push(rem[k]);ps.push(pr[k]);prev=rem[k];rem.splice(k,1);}
+  var key=o.join('');d8cnt[key]=(d8cnt[key]||0)+1;d8tot++;d8lastS={o:o,ps:ps};}
+function drawD8(){
+  var beta=+$('#d8b').value/10;$('#d8bv').textContent=beta.toFixed(1);
+  var all=PERMS.map(function(o){return {o:o,p:d8seqP(o,beta)};}).sort(function(a,b){return b.p-a.p;});
+  var top=all.slice(0,10),pm=top[0].p,scale=Math.max(pm,0.02),html='';
+  top.forEach(function(r){var k=r.o.join(''),fr=d8tot?(d8cnt[k]||0)/d8tot:0;
+    html+='<div class="hbar"><span class="mono" style="font-family:ui-monospace,Menlo,monospace">('+r.o.join(',')+')</span><div class="track"><i style="width:'+(100*Math.min(1,r.p/scale))+'%;background:var(--s1);bottom:50%"></i><i style="width:'+(100*Math.min(1,fr/scale))+'%;background:var(--s2);top:50%"></i></div><b>'+(100*r.p).toFixed(1)+'%</b></div>';});
+  $('#d8bars').innerHTML=html;
+  $('#d8pmax').textContent=(100*pm).toFixed(1)+'%';$('#d8n').textContent=d8tot;
+  if(d8lastS)chips($('#d8last'),d8lastS.o.map(function(j,i){return W8[j-1]+','+j+' <span style="color:var(--muted)">'+d8lastS.ps[i].toFixed(2)+'</span>';}));
+  else $('#d8last').innerHTML='<span class="chip">아직 없음</span>';
+}
+$('#d8b').oninput=function(){d8cnt={};d8tot=0;d8lastS=null;drawD8();};
+$('#d8one').onclick=function(){d8sample();drawD8();};
+$('#d8many').onclick=function(){for(var i=0;i<100;i++)d8sample();drawD8();};
+$('#d8clr').onclick=function(){d8cnt={};d8tot=0;d8lastS=null;drawD8();};
+
+/* ══════ 퀴즈 ══════ */
+var QZ=[
+ {q:'체인 룰로 출력 순서를 바꾸면 이론상 결합확률 P(Y|X)는?',o:['순서에 따라 달라진다','같다 — 그런데도 실제 학습 성능은 달라질 수 있다','순서를 뒤집을 때만 같다'],a:1,
+  e:'체인 룰은 독립 가정이 없어서 어떤 순서로도 같은 결합확률을 표현합니다. 차이는 표현력이 아니라 비볼록 최적화와 매개변수화(LSTM)에서 생깁니다.'},
+ {q:'Process 블록의 결과 q*_T가 입력 순서와 무관한 이유는?',o:['LSTM이 입력을 받지 않고, 메모리를 내용 기반 어텐션의 가중합으로만 읽기 때문','메모리를 정렬해서 넣기 때문','입력 수가 고정되어 있기 때문'],a:0,
+  e:'점수·softmax·가중합은 메모리 순서를 바꿔도 같은 값을 냅니다. LSTM은 원소를 하나씩 읽지 않으므로 순서를 느낄 경로가 없습니다.'},
+ {q:'표 1에서 P = 0 step·glimpse 0 모델이 Ptr-Net보다도 못한 이유는?',o:['파라미터가 더 적어서','Write 블록이 입력 요약 없이 "눈을 감고" 가리켜야 해서','과적합 때문에'],a:1,
+  e:'처리 스텝 0이면 디코더가 받는 문맥 q*에 입력 정보가 없습니다. 한 번이라도 읽게 하면(P ≥ 1) Ptr-Net을 넘어섭니다.'},
+ {q:'임베딩을 더하는(bag-of-words) 인코더의 문제로 논문이 지적한 것은?',o:['순열 불변이 아니다','원소 수와 무관한 고정 차원이라 큰 집합을 담기 어렵다','미분할 수 없다'],a:1,
+  e:'합은 순열 불변이지만 메모리가 원소 수에 따라 늘지 않습니다. 그래서 원소별 메모리 + 어텐션을 씁니다.'},
+ {q:'파스 트리를 너비 우선으로 펼쳐 출력하게 했더니?',o:['F1이 89.5% → 81.5%로 떨어졌다','F1이 같았다','학습이 더 빨랐다'],a:0,
+  e:'같은 트리, 같은 정보인데도 출력 순서만 바꿔 8%p가 떨어졌고, 잘못된 트리도 많이 나왔습니다.'},
+ {q:'식 (9)를 순진하게(매번 max) 쓰면 생기는 문제와 해결책은?',o:['계산이 느릴 뿐, 결과는 같다','초기값이 선호한 순서에 갇힌다 → 균등 사전학습 + p(Y_π|X)에 비례한 샘플링','항상 역순으로 수렴한다 → 정규화를 키운다'],a:1,
+  e:'고른 순서로 학습하면 그 순서가 더 좋아져 또 선택되는 자기강화가 일어납니다. 처음 1,000스텝은 모든 순서를 고르게 학습하고, 이후 조상 샘플링으로 O(1)에 순서를 뽑습니다.'}
+];
+(function(){
+  var box=$('#quiz'),score=0,done=0;
+  QZ.forEach(function(it,qi){
+    var d=document.createElement('div');d.className='q';
+    d.innerHTML='<h4>Q'+(qi+1)+'. '+it.q+'</h4>'+it.o.map(function(o,j){return '<label class="opt"><input type="radio" name="q'+qi+'" value="'+j+'">'+o+'</label>';}).join('')+'<div class="expl"></div>';
+    box.appendChild(d);
+    d.querySelectorAll('input').forEach(function(inp){inp.addEventListener('change',function(){
+      if(d.dataset.done)return;d.dataset.done=1;done++;
+      var j=+inp.value,ok=j===it.a;if(ok)score++;
+      d.querySelectorAll('.opt').forEach(function(l,x){if(x===it.a)l.classList.add('correct');else if(x===j)l.classList.add('wrong');});
+      var ex=d.querySelector('.expl');ex.textContent=(ok?'정답! ':'오답. ')+it.e;ex.classList.add('show');if(!ok)ex.classList.add('bad');
+      $('#quizScore').textContent=done+'문제 중 '+score+'개 정답'+(done===QZ.length?' — 끝!':'');
+    });});
+  });
+})();
+
+/* ══════ 테마·초기화 ══════ */
+d1y=[0.9,0.25,0.4,0.7,0.1];d2gen();
+function drawAll(){drawD1();drawD2();drawD3();drawD4();drawD4b();drawD5();drawD6();drawD7();drawD8();}
+var tbtn=$('#themeBtn');
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.setAttribute('data-theme','dark');
+function syncBtn(){tbtn.textContent=document.documentElement.getAttribute('data-theme')==='dark'?'◑ 라이트':'◐ 다크';}
+tbtn.addEventListener('click',function(){var d=document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme',d?'light':'dark');syncBtn();drawAll();});
+syncBtn();drawAll();
+var rz;window.addEventListener('resize',function(){clearTimeout(rz);rz=setTimeout(drawAll,120);});
+document.addEventListener('DOMContentLoaded',function(){
+  if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});
+});
+window.addEventListener('load',function(){
+  if(window.renderMathInElement&&!document.querySelector('.katex'))renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});
+});
+</script>
+</body>
+</html>
