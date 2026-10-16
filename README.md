@@ -1,8 +1,8 @@
-# How set2seq Works
+# How Order Matters Works
 
 **Order Matters — 집합을 위한 seq2seq.** Vinyals, Bengio & Kudlur의 *Order Matters: Sequence to Sequence for Sets* (ICLR 2016)를 브라우저에서 직접 실험하며 읽는 인터랙티브 교육 자료입니다. 체인 룰은 어떤 순서로 풀어도 같은 확률을 주는데 왜 순서를 바꾸면 성능이 달라지는지, 순서가 없는 입력은 어떻게 읽고 순서가 없는 출력은 어떻게 내보내는지를 다룹니다.
 
-🔗 **[데모 바로가기](https://dev-jonghoonpark.github.io/how-set2seq-works/)**
+🔗 **[데모 바로가기](https://dev-jonghoonpark.github.io/how-order-matters-works/)**
 
 ## 다루는 내용
 
