@@ -471,7 +471,7 @@ function sig(x){return 1/(1+Math.exp(-x));}
 function norm(a){return Math.sqrt(a.reduce(function(s,v){return s+v*v;},0));}
 function sub(a,b){return a.map(function(v,i){return v-b[i];});}
 function shuffle(a,r){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor((r?r():Math.random())*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}return a;}
-function setupCanvas(cv){var dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=+cv.getAttribute('height');
+function setupCanvas(cv){var dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=+(cv.dataset.h||(cv.dataset.h=cv.getAttribute('height')));
   cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+'px';var c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);return {c:c,w:w,h:h};}
 function chips(el,arr,on){el.innerHTML=arr.map(function(v,i){return '<span class="chip'+(on&&on(i)?' on':'')+'">'+v+'</span>';}).join('');}
 function randNums(n){var a=[];for(var i=0;i<n;i++)a.push(Math.round(Math.random()*100)/100);return a;}
